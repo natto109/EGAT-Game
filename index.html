@@ -1,0 +1,798 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>EGAT Memory Matching</title>
+<style>
+/* ฟอนต์: วางไฟล์ใน assets/fonts/ ตามชื่อนี้ ไม่มีไฟล์ = ใช้ฟอนต์ในเครื่อง */
+@font-face{font-family:"GameFont";src:url("assets/fonts/Main-Regular.woff2") format("woff2"),url("assets/fonts/Main-Regular.ttf") format("truetype");font-weight:400}
+@font-face{font-family:"GameFont";src:url("assets/fonts/Main-Bold.woff2") format("woff2"),url("assets/fonts/Main-Bold.ttf") format("truetype");font-weight:700}
+/* ฟอนต์ตัวเลข (ชื่อไฟล์ต้องตรงตามนี้ใน assets/fonts/) */
+@font-face{font-family:"GothamBold";src:url("assets/fonts/GothamBold.ttf") format("truetype");font-display:block}
+@font-face{font-family:"GothamMedium";src:url("assets/fonts/GothamMedium_1.ttf") format("truetype");font-display:block}
+@font-face{font-family:"ThaiFont";src:url("assets/fonts/Thai-Regular.woff2") format("woff2"),url("assets/fonts/Thai-Regular.ttf") format("truetype")}
+:root{--yellow:#FFC20E;--font:"GameFont","Montserrat","Leelawadee UI","Sarabun","Tahoma",sans-serif;--thai:"ThaiFont","Sarabun","Leelawadee UI","Tahoma",sans-serif}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;color:#fff;font-family:var(--font);touch-action:manipulation}
+input,select,textarea{-webkit-user-select:text;user-select:text;font:inherit}
+button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+.hidden{display:none!important}
+
+/* ---------- เวที 1920x1080 ย่อ/ขยายให้พอดีจอ ---------- */
+#stage{position:absolute;left:50%;top:50%;width:1920px;height:1080px;transform-origin:center;overflow:hidden;background:#02060f}
+.screen{position:absolute;inset:0;display:none;background:#02060f center/100% 100% no-repeat}
+.screen.active{display:block}
+.abs{position:absolute}
+#fx{position:absolute;left:0;top:0;width:1920px;height:1080px;pointer-events:none}
+
+/* หน้า 1 */
+#scr-standby{background-image:url("assets/standby/bg.jpg");cursor:pointer}
+#scr-standby img,#scr-standby canvas{position:absolute;pointer-events:none;-webkit-user-drag:none;user-select:none}
+#scr-standby .spr{will-change:transform;transform-origin:50% 50%}
+
+/* หน้า 2 */
+#scr-count{background-image:url("assets/bg-countdown.jpg")}
+#countNum{left:0;right:0;top:0;bottom:0;display:flex;align-items:center;justify-content:center;font-family:"GothamBold",var(--font);font-size:440px;font-weight:700;color:var(--yellow);line-height:1}
+/* นับถอยหลัง: fade + zoom in เข้ามา → ค้าง → fade + zoom out ออกไป ภายใน 1 วินาที */
+.pop{animation:pop 1s linear both}
+@keyframes pop{
+  0%  {transform:scale(.35);opacity:0;animation-timing-function:cubic-bezier(.2,.9,.3,1.2)}
+  28% {transform:scale(1);opacity:1;animation-timing-function:linear}
+  68% {transform:scale(1.04);opacity:1;animation-timing-function:cubic-bezier(.5,0,.9,.5)}
+  100%{transform:scale(1.7);opacity:0}}
+
+/* หน้าเกม */
+#scr-game{background-image:url("assets/bg-game.jpg")}
+#hudPairs{right:1483px;top:778px;height:104px;display:flex;align-items:center;font-family:"GothamMedium",var(--font);font-size:72px;font-weight:500;line-height:1}
+#hudTime{right:1483px;top:906px;height:104px;display:flex;align-items:center;font-family:"GothamMedium",var(--font);font-size:72px;font-weight:500;line-height:1;font-variant-numeric:tabular-nums}
+#hudTime.warn{color:#ff5a5a}
+#phase{left:566px;width:1100px;top:82px;height:52px;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:700;letter-spacing:.14em;color:var(--yellow)}
+#btnReset{left:1672px;top:72px;width:178px;height:86px}   /* ปุ่ม RESET ในรูป bg-game อยู่ที่ x 1685-1834, y 87-142 */
+#confirm{position:absolute;inset:0;z-index:20;background:rgba(0,4,16,.72);display:flex;align-items:center;justify-content:center}
+#confirm .box{width:860px;background:#06173d;border:3px solid var(--yellow);border-radius:28px;padding:56px 64px 52px;text-align:center}
+#confirm h2{font-size:52px;font-weight:700;color:var(--yellow);letter-spacing:.04em;margin-bottom:14px}
+#confirm p{font-size:30px;line-height:1.5;margin-bottom:44px;font-family:var(--font)}
+#confirm p small{display:block;font-family:var(--thai);font-size:26px;color:rgba(255,255,255,.75)}
+#confirm .btns{display:flex;gap:32px;justify-content:center}
+#confirm button{min-width:300px;font-size:32px;font-weight:700;padding:20px 32px;border-radius:999px;letter-spacing:.06em}
+#confirm .yes{background:var(--yellow);color:#06173d}
+#confirm .no{border:3px solid #fff;color:#fff}
+#confirm button:active{transform:scale(.96)}
+#grid{left:566px;top:171px;width:1274px;height:827px;display:grid;align-content:center;justify-content:center}
+.card{position:relative;perspective:1400px;cursor:pointer}
+.card .inner{position:absolute;inset:0;transition:transform .45s;transform-style:preserve-3d}
+.card.up .inner,.card.matched .inner{transform:rotateY(180deg)}
+.card .face{position:absolute;inset:0;border-radius:22px;overflow:hidden;backface-visibility:hidden;-webkit-backface-visibility:hidden;background:center/cover no-repeat;display:flex;align-items:center;justify-content:center}
+.card .back{background-color:#0B4AA8;background-image:url("assets/card-backA.png")}
+.card .back.b{background-image:url("assets/card-backB.png"),url("assets/card-backA.png")}  /* ไม่มีไฟล์ B = ใช้ A */
+.card .front{transform:rotateY(180deg);background-color:#fff;color:#0B4AA8;font-size:110px;font-weight:700}
+.card.matched .front{outline:5px solid var(--yellow);outline-offset:-5px}
+.card.matched{animation:bump .4s}
+@keyframes bump{50%{transform:scale(1.05)}}
+
+/* หน้าสรุป */
+#scr-summary{background-image:url("assets/bg-summary.jpg");cursor:pointer}
+/* กล่อง MATCHED PAIRS: x 91-459, y 239-578 · กล่อง DID YOU KNOW: x 493-1835, y 239-990 (หัวข้อจบที่ y 347) */
+#sumPairs{left:91px;width:368px;top:330px;height:230px;display:flex;align-items:center;justify-content:center;font-family:"GothamMedium",var(--font);font-size:120px;font-weight:500;line-height:1}
+#sumPairs.withReward{top:325px;height:150px}
+#sumReward{left:91px;width:368px;top:470px;height:100px;display:flex;align-items:center;justify-content:center;gap:12px;text-align:center;padding:0 24px}
+#sumReward img{max-width:320px;max-height:90px;object-fit:contain}
+#sumReward svg{width:44px;height:44px;flex:none}
+#rewardText{font-size:24px;font-weight:700;line-height:1.2;text-align:left}
+/* ===== หน้าสรุป: animation ตอนเข้า ===== */
+/* ตัวเลขคะแนน: หมดเวลา = zoom in · จับครบ = zoom in + สีทอง เรืองแสง + แสงวิ่งแวววาว */
+#sumPairs.anim-lose{animation:numIn .8s cubic-bezier(.2,.9,.3,1.25) both}
+#sumPairs.anim-win{animation:numIn 1s cubic-bezier(.2,.9,.3,1.35) both,shine 2.2s linear 1s infinite,goldGlow 1.6s ease-in-out 1s infinite;
+  color:transparent;-webkit-background-clip:text;background-clip:text;
+  background-image:linear-gradient(110deg,#E8A800 0%,#FFC20E 38%,#FFF4C2 48%,#FFFFFF 50%,#FFF4C2 52%,#FFC20E 62%,#E8A800 100%);background-size:300% 100%;background-position:100% 0}
+@keyframes numIn{0%{transform:scale(.2);opacity:0}55%{transform:scale(1.18);opacity:1}100%{transform:scale(1);opacity:1}}
+@keyframes shine{0%{background-position:100% 0}60%,100%{background-position:0 0}}
+@keyframes goldGlow{0%,100%{filter:drop-shadow(0 0 6px rgba(255,194,14,.55))}50%{filter:drop-shadow(0 0 22px rgba(255,214,90,.95))}}
+/* quote: fade in ปาดจากบนลงล่าง (ใช้ mask ไล่จากบน) */
+.reveal{-webkit-mask-image:linear-gradient(to bottom,#000 0%,#000 40%,transparent 60%,transparent 100%);mask-image:linear-gradient(to bottom,#000 0%,#000 40%,transparent 60%,transparent 100%);
+  -webkit-mask-size:100% 250%;mask-size:100% 250%;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;animation:wipeDown 1.3s ease-out .7s both}
+@keyframes wipeDown{0%{-webkit-mask-position:0 100%;mask-position:0 100%;opacity:0}25%{opacity:1}100%{-webkit-mask-position:0 0;mask-position:0 0;opacity:1}}
+.fadeLate{animation:fadeIn .5s ease-out 1.7s both}@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+#celeb{left:0;top:0;width:1920px;height:1080px;pointer-events:none;z-index:6}
+/* รูป quote แสดงขนาดจริง (1 px ในรูป = 1 px บนจอ 1920x1080) · ใหญ่เกินพื้นที่จะย่อให้พอดี */
+#dykBox{left:553px;top:360px;width:1222px;height:610px;display:flex;justify-content:center;align-items:center;overflow:hidden}   /* พื้นที่ใต้หัวข้อ (y 360-970) · รูปอยู่กึ่งกลางทั้งแนวนอนและแนวตั้ง */
+#dykImg{display:block;max-width:100%;max-height:100%;object-fit:contain}
+/* เลขลำดับ quote มุมขวาล่างของกล่อง DID YOU KNOW (กล่อง x 493-1835, y 239-990) */
+#dykNo{right:105px;top:936px;min-width:44px;height:44px;padding:0 10px;border-radius:22px;background:rgba(150,162,180,.7);display:flex;align-items:center;justify-content:center;
+  font-family:"GothamMedium",var(--font);font-size:20px;font-weight:500;color:#fff;letter-spacing:.02em;line-height:1}
+#dykText{left:553px;top:392px;width:1222px;height:560px;font-family:var(--thai);font-size:48px;line-height:1.6;text-align:center;white-space:pre-line;overflow:hidden}
+
+/* popup ชื่อ */
+#popup{position:absolute;inset:0;z-index:10;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center}
+.panel{background:#fff;color:#111;border-radius:24px;padding:48px 64px;text-align:center;width:900px}
+.panel h2{font-size:40px;margin-bottom:24px;font-family:var(--thai)}
+#nameInput{width:100%;font-size:40px;padding:12px 20px;border:2px solid #ccc;border-radius:12px;text-align:center;margin-bottom:24px}
+.prow{display:flex;gap:24px;justify-content:center}
+.prow button{font-size:30px;padding:12px 40px;border-radius:12px;background:#0B4AA8;color:#fff;font-family:var(--thai)}
+.prow button.ghost{background:#e9e9e9;color:#444}
+
+/* ---------- Setting (นอกเวที) ---------- */
+#settings{position:fixed;inset:0;z-index:100;background:#f3f4f7;color:#222;overflow:auto;padding:24px 4vw 96px;font-family:"Sarabun","Leelawadee UI","Tahoma",sans-serif;display:none}
+#settings.open{display:block}
+#settings h2{font-size:28px;margin:8px 0 16px}
+#settings h3{font-size:20px;margin:26px 0 10px;border-bottom:1px solid #ccc;padding-bottom:6px}
+.sgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px 24px}
+.sgrid label{display:flex;flex-direction:column;font-size:15px;gap:4px}
+.sgrid input,.sgrid select,.sgrid textarea{padding:8px 10px;border:1px solid #bbb;border-radius:8px;font-size:16px;background:#fff}
+.box{background:#fff;border-radius:12px;padding:14px;margin-bottom:12px;font-size:15px}
+.thumbs{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.thumbs img{width:80px;height:64px;object-fit:cover;border-radius:6px;border:1px solid #ddd}
+.sbtn{font-size:15px;padding:8px 14px;border-radius:8px;background:#2f6fed;color:#fff}
+.sbtn.gray{background:#e4e4e4;color:#333}.sbtn.danger{background:#d64545;color:#fff}
+.ok{color:#1a8a4a}.miss{color:#c23}.note{font-size:14px;color:#666}
+#scoreList,#quoteList{max-height:240px;overflow:auto;background:#fff;border-radius:8px;padding:8px 12px;font-size:15px}
+#quoteList .next{font-weight:700;color:#2f6fed}
+#settingsBar{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #ccc;padding:12px 4vw;display:flex;gap:12px;justify-content:flex-end}
+#pinBox{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center}
+#pinBox .p{background:#fff;color:#111;border-radius:16px;padding:32px;width:360px;text-align:center;font-family:"Sarabun",sans-serif}
+#pinBox input{font-size:28px;text-align:center;width:100%;margin:16px 0;padding:8px;border:2px solid #ccc;border-radius:10px}
+#hotspot{position:fixed;left:0;top:0;width:90px;height:90px;z-index:50}
+#hotspotR{position:fixed;right:0;top:0;width:80px;height:70px;z-index:50}   /* เล็กกว่าฝั่งซ้าย ไม่ให้ทับปุ่ม RESET */
+#quitBox{position:fixed;inset:0;z-index:210;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center}
+#quitBox .p{background:#fff;color:#111;border-radius:16px;padding:32px 36px;width:420px;text-align:center;font-family:"Sarabun",sans-serif}
+#quitBox b{font-size:24px}#quitBox p{margin:10px 0 22px;color:#555}
+</style>
+</head>
+<body>
+<div id="stage">
+
+  <!-- หน้า 1 Stand by : แตะตรงไหนก็เริ่ม -->
+  <!-- หน้า 1 Stand by: ภาพจาก PSD แยกชั้น (assets/standby/) ตำแหน่ง = พิกัดใน PSD 1920x1080 · ลำดับชั้นตาม PSD -->
+  <section id="scr-standby" class="screen active">
+    <canvas id="stbBlades" width="240" height="210" style="left:900px;top:70px"></canvas>
+    <img src="assets/standby/hub1.png" style="left:986px;top:128px" alt="">
+    <img src="assets/standby/hub2.png" style="left:962px;top:191px" alt="">
+    <img src="assets/standby/hub3.png" style="left:1029px;top:181px" alt="">
+    <div id="stbMascot" class="spr" style="position:absolute;left:1383px;top:680px;width:325px;height:334px">
+      <canvas id="stbJet" width="230" height="190" style="left:300px;top:225px"></canvas>
+      <img src="assets/standby/mascot.png" style="left:0;top:0" alt="">
+      <img id="stbEyeL" class="spr" src="assets/standby/eyeL.png" style="left:25px;top:79px" alt="">
+      <img id="stbEyeR" class="spr" src="assets/standby/eyeR.png" style="left:75px;top:116px" alt="">
+    </div>
+    <img id="stbBird3" class="spr" src="assets/standby/bird3.png" style="left:725px;top:221px" alt="">
+    <img id="stbDrone" class="spr" src="assets/standby/drone.png" style="left:533px;top:345px" alt="">
+    <img id="stbBird2" class="spr" src="assets/standby/bird2.png" style="left:1105px;top:232px" alt="">
+    <img id="stbCloud" class="spr" src="assets/standby/cloud.png" style="left:1150px;top:162px" alt="">
+    <img id="stbBird1" class="spr" src="assets/standby/bird1.png" style="left:503px;top:561px" alt="">
+    <img id="stbSun" class="spr" src="assets/standby/sun.png" style="left:1273px;top:182px" alt="">
+    <img id="stbStart" class="spr" src="assets/standby/start.png" style="left:750px;top:877px" alt="">
+    <img src="assets/standby/title.png" style="left:81px;top:70px" alt="">
+  </section>
+
+  <!-- หน้า 2 Countdown -->
+  <section id="scr-count" class="screen"><div id="countNum" class="abs">3</div></section>
+
+  <!-- หน้าเกม (จำการ์ด + เล่น) -->
+  <section id="scr-game" class="screen">
+    <div id="phase" class="abs"></div>
+    <button id="btnReset" class="abs" aria-label="Reset"></button>
+    <div id="grid" class="abs"></div>
+    <canvas id="matchFx" class="abs" width="1920" height="1080" style="left:0;top:0;width:1920px;height:1080px;pointer-events:none;z-index:5"></canvas>
+    <div id="hudPairs" class="abs">0/10</div>
+    <div id="hudTime" class="abs">00:30</div>
+  </section>
+
+  <!-- หน้าสรุป -->
+  <section id="scr-summary" class="screen">
+    <div id="sumPairs" class="abs">0/10</div>
+    <div id="sumReward" class="abs"></div>
+    <div id="dykText" class="abs"></div>
+    <div id="dykBox" class="abs"><img id="dykImg" class="hidden" alt=""></div>
+    <div id="dykNo" class="abs hidden"></div>
+    <canvas id="celeb" class="abs" width="1920" height="1080"></canvas>
+  </section>
+
+  <!-- popup ชื่อ (เปิดใน Setting) -->
+  <!-- ยืนยันก่อนกลับหน้าแรก (ปุ่ม RESET) -->
+  <div id="confirm" class="hidden"><div class="box">
+    <h2>RETURN TO HOME?</h2>
+    <p>Your current game will end.<small>ต้องการกลับหน้าแรกใช่หรือไม่ เกมที่เล่นอยู่จะสิ้นสุดลง</small></p>
+    <div class="btns"><button class="no" id="cfNo">NO</button><button class="yes" id="cfYes">YES</button></div>
+  </div></div>
+
+  <div id="popup" class="hidden"><div class="panel">
+    <h2>พิมพ์ชื่อเพื่อบันทึกคะแนน<br><small style="font-size:.6em;color:#777">Enter your name</small></h2>
+    <input id="nameInput" maxlength="30" autocomplete="off">
+    <div class="prow"><button id="btnSave">บันทึก / Save</button><button id="btnSkip" class="ghost">ข้าม / Skip</button></div>
+  </div></div>
+</div>
+
+<!-- Setting -->
+<div id="settings">
+  <h2>Setting</h2>
+
+  <h3>เวลา</h3>
+  <div class="sgrid">
+    <label>เวลาให้จำการ์ด (วินาที)<input type="number" min="1" max="60" data-k="memorizeSec"></label>
+    <label>เวลาเล่น (วินาที)<input type="number" min="5" max="600" data-k="playSec"></label>
+    <label>ไม่มีคนแตะเกิน (วินาที) กลับหน้า Stand by<input type="number" min="10" max="3600" data-k="idleSec"></label>
+    <label>Quote ไทย/อังกฤษ สลับทุก (วินาที)<input type="number" min="2" max="60" data-k="langSwitchSec"></label>
+    <label>Popup ชื่อ ปิดเองใน (วินาที)<input type="number" min="5" max="600" data-k="popupSec"></label>
+  </div>
+
+  <h3>เกม</h3>
+  <div class="sgrid">
+    <label>จำนวนคู่การ์ด<input type="number" min="2" max="20" data-k="pairs"></label>
+    <label>เลือก set<select data-k="setMode"><option value="random">สุ่ม (ไม่ซ้ำรอบก่อน)</option><option value="A">Set A</option><option value="B">Set B</option><option value="C">Set C</option></select></label>
+    <label>ช่องห่างระหว่างการ์ด (px บนจอ 1920)<input type="number" min="0" max="60" data-k="gap"></label>
+    <label>ปุ่ม RESET (มี pop up ยืนยันก่อน)<select data-k="resetMode"><option value="standby">กลับหน้า Stand by</option><option value="restart">เริ่มเกมใหม่ทันที</option></select></label>
+    <label>Pop up ยืนยัน RESET ปิดเองใน (วินาที)<input type="number" min="3" max="120" data-k="confirmSec"></label>
+    <label>พิมพ์ชื่อหลังจบเกม<select data-k="askName"><option value="0">ไม่ใช้</option><option value="1">ใช้</option></select></label>
+    <label>คะแนนต่อคู่ (เก็บใน CSV)<input type="number" min="0" data-k="pointPerPair"></label>
+    <label>โบนัสต่อวินาทีที่เหลือ (จับครบ)<input type="number" min="0" data-k="timeBonus"></label>
+  </div>
+
+  <h3>เสียง</h3>
+  <div class="sgrid">
+    <label>เสียง<select data-k="soundOn"><option value="1">เปิด</option><option value="0">ปิด</option></select></label>
+    <label>ระดับเสียงรวม (0-100)<input type="number" min="0" max="100" data-k="masterVol"></label>
+    <label>เพลงตอนเล่น (0-100)<input type="number" min="0" max="100" data-k="musicVol"></label>
+    <label>เสียงเอฟเฟกต์ (0-100)<input type="number" min="0" max="100" data-k="sfxVol"></label>
+  </div>
+  <div id="sndTest" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px"></div>
+
+  <h3>เอฟเฟกต์</h3>
+  <div class="sgrid">
+    <label>ดาวระยิบระยับ: จำนวนดวง (0 = ปิด)<input type="number" min="0" max="200" data-k="starCount"></label>
+    <label>ดาว: ความช้า 1 รอบกระพริบ (วินาที)<input type="number" min="1" max="20" step="0.5" data-k="starSlow"></label>
+    <label>Light sweep BEYOND: ทุก (วินาที, 0 = ปิด)<input type="number" min="0" max="120" data-k="sweepEvery"></label>
+    <label>Light sweep: ความเร็ว 1 ครั้ง (วินาที)<input type="number" min="0.3" max="10" step="0.1" data-k="sweepDur"></label>
+    <label>Light sweep: ความสว่าง (0-100)<input type="number" min="0" max="100" data-k="sweepPower"></label>
+    <label>หน้า Stand by: animation<select data-k="stbAnim"><option value="1">เปิด</option><option value="0">ปิด (ภาพนิ่ง)</option></select></label>
+    <label>หน้า Stand by: ความเร็วนก (px/วินาที)<input type="number" min="20" max="600" data-k="birdSpeed"></label>
+    <label>หน้า Stand by: กังหันหมุน 1 รอบ (วินาที)<input type="number" min="1" max="60" step="0.5" data-k="turbineRev"></label>
+    <label>จบเกมจับครบ: วงแสงทองที่กล่องคะแนน<select data-k="celebrate"><option value="1">เปิด</option><option value="0">ปิด</option></select></label>
+    <label>จับคู่ถูก: เส้นพลังงานเชื่อมการ์ด<select data-k="matchFx"><option value="1">เปิด</option><option value="0">ปิด</option></select></label>
+  </div>
+
+  <h3>ของรางวัล (บันทึกใน CSV · แสดงบนจอได้ถ้าเปิดไว้)</h3>
+  <div class="sgrid">
+    <label>รางวัลขั้น 1: จับได้ตั้งแต่ (คู่)<input type="number" min="1" data-k="r1Min"></label>
+    <label>รางวัลขั้น 1: ชื่อรางวัล<input data-k="r1Text"></label>
+    <label>รางวัลขั้น 2: จับได้ตั้งแต่ (คู่)<input type="number" min="1" data-k="r2Min"></label>
+    <label>รางวัลขั้น 2: ชื่อรางวัล<input data-k="r2Text"></label>
+    <label>ไม่ได้รางวัล: ข้อความ<input data-k="r0Text"></label>
+    <label>แสดงรางวัลในกล่อง MATCHED PAIRS (หน้าสรุป)<select data-k="showReward"><option value="0">ไม่แสดง (ตาม design ล่าสุด)</option><option value="1">แสดงใต้ตัวเลข</option></select></label>
+  </div>
+  <!-- <p class="note" style="margin-top:8px">ถ้ามีไฟล์ assets/reward-0.png, reward-1.png, reward-2.png จะแสดงรูปนั้นแทนไอคอน</p> -->
+
+  <h3>Did you know? (รูป quotes/txt01.png… หรือข้อความใน quotes.js)</h3>
+  <!-- <p class="note">วางรูป txt01.png, txt02.png … (เลขหลักเรียงต่อกัน · เลขย่อยใช้ txt06.1.png, txt06.2.png) ในโฟลเดอร์ quotes แล้วกด F5 · รูปแสดงขนาดจริง (export จาก artboard 1920×1080) สูงสุด 1222×580 px พื้นโปร่งใส · ถ้าไม่มีรูปเลยจะใช้ข้อความใน quotes.js แทน</p> -->
+  <div id="quoteList"></div>
+  <div class="sgrid" style="margin-top:10px"><label>รูป quote: เลื่อนขึ้น/ลง (px, ติดลบ = ขึ้น)<input type="number" min="-300" max="300" data-k="quoteY"></label>
+    <label>เลขลำดับ quote มุมขวาล่าง (อ่านจากชื่อไฟล์ txtNN)<select data-k="showQuoteNo"><option value="1">แสดง</option><option value="0">ซ่อน</option></select></label></div>
+  <div style="margin-top:8px"><button class="sbtn gray" id="btnQuoteReset">เริ่มนับจากข้อ 1 ใหม่</button></div>
+
+  <h3>ไฟล์กราฟิกที่พบในโฟลเดอร์ assets</h3>
+  <div id="assetList" class="box"></div>
+  <div id="cardList"></div>
+
+  <h3>คะแนนที่บันทึกไว้</h3>
+  <div id="scoreList"></div>
+  <div style="margin-top:10px;display:flex;gap:10px"><button class="sbtn" id="btnExport">Export CSV</button><button class="sbtn danger" id="btnResetScores">Reset คะแนนทั้งหมด</button></div>
+
+  <h3>อื่นๆ</h3>
+  <div class="sgrid"><label>PIN เข้า Setting (เว้นว่าง = ไม่ใช้)<input data-k="pin" inputmode="numeric"></label></div>
+  <!-- <p class="note" style="margin-top:16px">เข้า Setting: แตะมุมซ้ายบน 5 ครั้งติดกัน หรือกด Ctrl+Shift+S · ปิดโปรแกรม: แตะมุมขวาบน 5 ครั้งติดกัน (ถ้าตั้ง PIN ต้องใส่ PIN) หรือกด Ctrl+Shift+Q</p> -->
+
+  <div id="settingsBar">
+    <button class="sbtn danger" id="btnQuit" style="margin-right:auto">ปิดโปรแกรม</button>
+    <button class="sbtn gray" id="btnFull">เต็มจอ</button>
+    <button class="sbtn gray" id="btnReload">โหลดไฟล์ใหม่ (F5)</button>
+    <button class="sbtn" id="btnTest">ทดลองเล่น</button>
+    <button class="sbtn" id="btnClose">บันทึกและปิด</button>
+  </div>
+</div>
+
+<div id="pinBox" class="hidden"><div class="p"><b>PIN</b><input id="pinInput" type="password" inputmode="numeric">
+  <div style="display:flex;gap:10px;justify-content:center"><button class="sbtn" id="pinOk">OK</button><button class="sbtn gray" id="pinCancel">ยกเลิก</button></div></div></div>
+<div id="quitBox" class="hidden"><div class="p"><b>ปิดโปรแกรม?</b><p id="quitMsg">เกมจะปิดและออกจากโหมดเต็มจอ</p>
+  <div style="display:flex;gap:10px;justify-content:center"><button class="sbtn danger" id="quitYes">ปิดโปรแกรม</button><button class="sbtn gray" id="quitNo">ยกเลิก</button></div></div></div>
+<div id="hotspot"></div>
+<div id="hotspotR"></div>
+
+<script src="quotes.js"></script>
+<script>
+'use strict';
+/* ================= ค่าเริ่มต้น ================= */
+const SETS=['A','B','C'];
+const DEF={memorizeSec:5,playSec:30,idleSec:180,langSwitchSec:5,popupSec:30,
+  pairs:10,setMode:'random',gap:21,resetMode:'standby',confirmSec:10,askName:'0',pointPerPair:100,timeBonus:10,
+  soundOn:'1',masterVol:90,musicVol:55,sfxVol:90,
+  matchFx:'1',celebrate:'1',quoteY:0,showQuoteNo:'1',stbAnim:'1',birdSpeed:140,turbineRev:8,starCount:45,starSlow:5,sweepEvery:6,sweepDur:1.6,sweepPower:70,
+  r1Min:6,r1Text:'Bag Tag',r2Min:10,r2Text:'Tote Bag or Foldable Tote Bag',r0Text:'Thank you for playing!',showReward:'0',pin:''};
+const K={set:'egat_mm_settings',score:'egat_mm_scores',last:'egat_mm_last',quote:'egat_mm_quote_idx'};
+const load=(k,d)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}};
+const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+let S=Object.assign({},DEF,load(K.set,{}));
+const num=k=>{const v=Number(S[k]);return Number.isFinite(v)&&v>=0?v:DEF[k]};
+const QUOTES=Array.isArray(window.QUOTES)?window.QUOTES:[];
+
+/* ================= helpers ================= */
+const $=id=>document.getElementById(id);
+const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a};
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const mmss=s=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+let current='scr-standby';
+function show(id){current=id;document.querySelectorAll('.screen').forEach(e=>e.classList.toggle('active',e.id===id));FX.attach(id)}
+
+/* ================= เอฟเฟกต์: ดาวระยิบระยับ + light sweep (วาดบน canvas ที่อยู่เหนือพื้นหลัง ใต้เนื้อหา) =================
+   light sweep ใช้ไฟล์ mask: assets/fx/sweep-<หน้า>.png = PNG โปร่งใสขนาด 1920x1080 ที่มีแค่ตัวอักษรที่ต้องการให้แสงวิ่งผ่าน
+   ไม่มีไฟล์ = หน้านั้นไม่มี sweep */
+const FX=(()=>{
+  const W=1920,H=1080,cv=document.createElement('canvas');cv.id='fx';cv.width=W;cv.height=H;
+  const ctx=cv.getContext('2d'),off=document.createElement('canvas');off.width=W;off.height=H;const octx=off.getContext('2d');
+  const SCR={'scr-standby':'standby','scr-count':'count','scr-game':'game','scr-summary':'summary'};
+  /* พื้นที่ที่ไม่ให้ดาวขึ้น (ทับตัวหนังสือ) [x0,y0,x1,y1] บนจอ 1920x1080 */
+  const EX={'scr-standby':[[60,60,560,620],[480,90,1420,1000],[1360,660,1740,1040],[1560,50,1880,160],[740,860,1180,1050]],
+    'scr-count':[[700,280,1220,800]],
+    'scr-game':[[0,0,520,1080],[1660,60,1860,150]],
+    'scr-summary':[[60,50,880,230],[80,230,1850,1000],[60,760,480,1030],[1560,50,1880,160]]};
+  /* mask ต่อหน้าได้หลายไฟล์: sweep-<หน้า>.png, sweep-<หน้า>-2.png, -3 … แต่ละไฟล์แสงวิ่งคนละจังหวะ */
+  const masks={};
+  for(const k of ['standby','count','game','summary']){masks[k]=[];
+    ['',  '-2','-3'].forEach((suf,i)=>{const im=new Image();im.onload=()=>{masks[k][i]=im};im.src=`assets/fx/sweep-${k}${suf}.png`})}
+  const TOP={'scr-standby':1};   /* หน้า Stand by มีภาพซ้อนหลายชั้น → วาดเอฟเฟกต์ไว้บนสุด (ดาวเลี่ยงตัวภาพด้วย EX) */
+  /* sprite ดาว: จุดกลมนุ่ม + แฉก 4 ทิศบางๆ */
+  const spr=document.createElement('canvas');spr.width=spr.height=48;{const g=spr.getContext('2d'),c=24;
+    const rg=g.createRadialGradient(c,c,0,c,c,10);rg.addColorStop(0,'rgba(255,255,255,1)');rg.addColorStop(.25,'rgba(220,235,255,.8)');rg.addColorStop(1,'rgba(200,220,255,0)');
+    g.fillStyle=rg;g.beginPath();g.arc(c,c,10,0,7);g.fill();
+    for(const [dx,dy] of [[1,0],[0,1]]){const lg=g.createLinearGradient(c-24*dx,c-24*dy,c+24*dx,c+24*dy);
+      lg.addColorStop(0,'rgba(255,255,255,0)');lg.addColorStop(.5,'rgba(255,255,255,.9)');lg.addColorStop(1,'rgba(255,255,255,0)');
+      g.fillStyle=lg;dx?g.fillRect(0,c-.75,48,1.5):g.fillRect(c-.75,0,1.5,48)}}
+  let screen=null,stars=[],sweepAt=-1e9,last=0;
+  const free=(x,y)=>!(EX[screen]||[]).some(([a,b,c,d])=>x>a&&x<c&&y>b&&y<d);
+  function spawn(now,first){let x,y,n=0;do{x=Math.random()*W;y=Math.random()*H}while(!free(x,y)&&++n<30);
+    const per=num('starSlow')*1000*(.7+Math.random()*.6);
+    return {x,y,s:.25+Math.random()*.55,per,t0:now+(first?-Math.random()*per:Math.random()*2500),warm:Math.random()<.25}}
+  function attach(id){screen=SCR[id]?id:null;if(!screen){cv.remove();return}
+    const el=$(id);if(cv.parentNode!==el||(TOP[id]&&el.lastChild!==cv)){if(TOP[id])el.appendChild(cv);else el.insertBefore(cv,el.firstChild)}
+    const now=performance.now();stars=Array.from({length:Math.max(0,Math.min(200,num('starCount')))},()=>spawn(now,true));sweepAt=now+800}
+  function frame(now){
+    requestAnimationFrame(frame);
+    if(!screen||now-last<33)return;last=now;           /* ~30fps พอสำหรับเอฟเฟกต์ช้าๆ */
+    ctx.clearRect(0,0,W,H);
+    /* ดาว */
+    ctx.globalCompositeOperation='lighter';
+    for(let i=0;i<stars.length;i++){const st=stars[i];const p=(now-st.t0)/st.per;
+      if(p>=1){stars[i]=spawn(now,false);continue}if(p<0)continue;
+      const a=Math.pow(Math.sin(Math.PI*p),3);ctx.globalAlpha=a*(st.warm?.75:.95);
+      const z=48*st.s;ctx.drawImage(spr,st.x-z/2,st.y-z/2,z,z);
+      if(st.warm){ctx.globalAlpha=a*.35;ctx.fillStyle='#FFC20E';ctx.beginPath();ctx.arc(st.x,st.y,z*.12,0,7);ctx.fill()}}
+    ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
+    /* light sweep */
+    const every=num('sweepEvery')*1000,dur=Math.max(300,num('sweepDur')*1000),cycle=every+dur,list=masks[SCR[screen]]||[],base=now-sweepAt;
+    if(every>0&&base>=0)list.forEach((m,i)=>{if(!m)return;
+      const local=((base-i*cycle*.5)%cycle+cycle)%cycle,p=local/dur;    /* ไฟล์ที่ 2 วิ่งช้ากว่าไฟล์แรกครึ่งรอบ */
+      if(p>1||(i&&base<i*cycle*.5))return;
+      const e=p<.5?2*p*p:1-Math.pow(-2*p+2,2)/2,x=-500+e*(W+1000);
+      octx.globalCompositeOperation='source-over';octx.clearRect(0,0,W,H);octx.drawImage(m,0,0,W,H);
+      octx.globalCompositeOperation='source-in';
+      octx.setTransform(1,0,-.45,1,0,0);
+      const g=octx.createLinearGradient(x-170,0,x+170,0),pw=num('sweepPower')/100*(i?.75:1);
+      g.addColorStop(0,'rgba(255,255,255,0)');g.addColorStop(.5,`rgba(255,255,255,${pw})`);g.addColorStop(1,'rgba(255,255,255,0)');
+      octx.fillStyle=g;octx.fillRect(-600,0,W+1200,H);octx.setTransform(1,0,0,1,0,0);
+      ctx.drawImage(off,0,0)});
+  }
+  requestAnimationFrame(frame);
+  return {attach};
+})();
+function fit(){const s=Math.min(innerWidth/1920,innerHeight/1080);$('stage').style.transform=`translate(-50%,-50%) scale(${s})`}
+addEventListener('resize',fit);fit();
+
+let timers=[];
+const later=(fn,ms)=>{const t=setTimeout(fn,ms);timers.push(t);return t};
+const every=(fn,ms)=>{const t=setInterval(fn,ms);timers.push(t);return t};
+function clearTimers(){timers.forEach(t=>{clearTimeout(t);clearInterval(t)});timers=[]}
+let runId=0;
+
+/* ================= อ่านไฟล์ในโฟลเดอร์ (file:// อ่านรายชื่อไฟล์ไม่ได้ จึงลองโหลดตามชื่อ) ================= */
+const probe=src=>new Promise(r=>{const i=new Image();i.onload=()=>r(src);i.onerror=()=>r(null);i.src=src});
+async function probeAny(base){for(const ext of ['png','jpg','jpeg','webp']){const u=await probe(`${base}.${ext}`);if(u)return u}return null}
+const cards={A:[],B:[],C:[]};const rewardImg=[null,null,null];const quoteImgs=[];
+async function scanAssets(){
+  for(const s of SETS){const found=await Promise.all(Array.from({length:40},(_,i)=>probeAny(`assets/cards/${s}/${String(i+1).padStart(2,'0')}`)));
+    cards[s]=found.filter(Boolean)}
+  for(let i=0;i<3;i++)rewardImg[i]=await probeAny(`assets/reward-${i}`);
+  /* รูป Did you know: quotes/txt01.png, txt02.png … (หยุดเมื่อเจอเลขที่ไม่มีไฟล์) */
+  /* ลำดับย่อย: txt06.png → txt06.1.png → txt06.2.png … → txt07.png (เลขหลักต้องเรียงต่อกัน ไม่ข้าม) */
+  quoteImgs.length=0;
+  for(let i=1;i<=99;i++){const base=`quotes/txt${String(i).padStart(2,'0')}`;
+    const found=await Promise.all([probeAny(base),...Array.from({length:9},(_,k)=>probeAny(`${base}.${k+1}`))]);
+    const got=found.filter(Boolean);if(!got.length)break;quoteImgs.push(...got)}
+}
+
+/* ================= เสียง (assets/sounds/<ชื่อ>.mp3|ogg|m4a|wav — ไฟล์ mp3 ที่วางเองจะถูกใช้ก่อน wav ตัวอย่าง) ================= */
+const SND_LIST={start:'กดปุ่ม START',count:'นับถอยหลัง 3-2-1',go:'เริ่มเล่น (GO)',music:'เพลงตอนเล่น (วนซ้ำ)',flip:'เปิดการ์ด',
+  match:'จับคู่ถูก',wrong:'จับคู่ผิด',warning:'เตือน 5 วินาทีสุดท้าย',end:'จบเกม (หมดเวลา)',applause:'จบเกม (จับครบ): ปรบมือ'};
+const SND={src:{},pool:{},music:null,fadeT:null};
+const tryAudio=src=>new Promise(r=>{const a=new Audio();const done=ok=>{a.oncanplaythrough=a.onerror=null;r(ok?src:null)};
+  a.oncanplaythrough=()=>done(true);a.onerror=()=>done(false);a.preload='auto';a.src=src;setTimeout(()=>done(false),4000)});
+async function loadSounds(){
+  for(const n of Object.keys(SND_LIST)){
+    for(const ext of ['mp3','ogg','m4a','wav']){const u=await tryAudio(`assets/sounds/${n}.${ext}`);if(u){SND.src[n]=u;break}}
+  }
+  if(SND.src.music){SND.music=new Audio(SND.src.music);SND.music.loop=true;SND.music.preload='auto'}
+}
+const vol=k=>S.soundOn==='1'?Math.max(0,Math.min(1,num('masterVol')/100*num(k)/100)):0;
+function sfx(n){
+  const src=SND.src[n],v=vol('sfxVol');if(!src||!v)return;
+  const pool=SND.pool[n]||(SND.pool[n]=[]);
+  let a=pool.find(x=>x.paused||x.ended);
+  if(!a){if(pool.length>=6)a=pool[0];else{a=new Audio(src);pool.push(a)}}
+  a.volume=v;try{a.currentTime=0}catch(e){}a.play().catch(()=>{});
+}
+function musicStart(){const m=SND.music;if(!m)return;clearInterval(SND.fadeT);m.volume=vol('musicVol');if(!m.volume)return;
+  try{m.currentTime=0}catch(e){}m.play().catch(()=>{})}
+function musicStop(ms=500){const m=SND.music;if(!m||m.paused)return;clearInterval(SND.fadeT);
+  const v0=m.volume,steps=Math.max(1,ms/40|0);let i=0;
+  SND.fadeT=setInterval(()=>{i++;m.volume=Math.max(0,v0*(1-i/steps));if(i>=steps){clearInterval(SND.fadeT);m.pause()}},40)}
+
+/* ================= สุ่มการ์ด ================= */
+const SYMBOLS=['★','●','▲','■','♥','♦','♣','♠','✿','☀','☂','☾','♪','✈','⚑','✚','◆','❄','☘','⚓'];
+function pickFaces(){
+  const pairs=Math.max(2,Math.min(20,num('pairs')));
+  const last=load(K.last,{set:null,ids:[]});
+  let set=S.setMode;
+  if(set==='random'){
+    const enough=SETS.filter(s=>cards[s].length>=pairs),some=SETS.filter(s=>cards[s].length);
+    let pool=enough.length?enough:some;if(pool.length>1)pool=pool.filter(s=>s!==last.set);
+    set=pool.length?pool[Math.random()*pool.length|0]:null;
+  }
+  const imgs=set?cards[set]:[];
+  const fresh=shuffle(imgs.filter(u=>!last.ids.includes(u))),used=shuffle(imgs.filter(u=>last.ids.includes(u)));
+  const faces=fresh.concat(used).slice(0,pairs).map(u=>({key:u,url:u}));
+  const sym=shuffle(SYMBOLS.map((s,i)=>({key:'sym'+i,label:s})));
+  while(faces.length<pairs)faces.push(sym.shift());
+  save(K.last,{set,ids:faces.map(f=>f.key)});
+  return {faces,pairs};
+}
+
+/* ================= grid: การ์ดแนวนอน 5:4 ให้ใหญ่ที่สุดในพื้นที่ ================= */
+function layoutGrid(){
+  const g=$('grid'),n=g.children.length,W=1274,H=827,gap=num('gap'),ratio=1.25;
+  let best={w:0,cols:1};
+  for(let cols=1;cols<=n;cols++){const rows=Math.ceil(n/cols);
+    const w=Math.min((W-gap*(cols-1))/cols,((H-gap*(rows-1))/rows)*ratio);if(w>best.w)best={w,cols}}
+  const w=Math.floor(best.w),h=Math.floor(w/ratio);
+  g.style.gap=gap+'px';g.style.gridTemplateColumns=`repeat(${best.cols},${w}px)`;
+  [...g.children].forEach(c=>{c.style.width=w+'px';c.style.height=h+'px'});
+}
+
+/* ================= หน้า Stand by: animation =================
+   กังหัน 3 ต้นหมุน · mascot ลอย + ไอพ่นที่เท้า + กระพริบตา · นก 3 ตัวบินตรงตามทิศที่หันหน้า วนกลับ · drone ลอยนิ่ง · เมฆ/พระอาทิตย์/ปุ่ม START ขยับเบาๆ */
+const STB=(()=>{
+  const TURB=[{x:993.1,y:135,a0:20.1},{x:969.2,y:198.4,a0:103.8},{x:1036.3,y:188.3,a0:128.7}],OX=900,OY=70,R=45;
+  const bc=$('stbBlades').getContext('2d'),jc=$('stbJet').getContext('2d');
+  /* นก: ทิศ = ทางที่หัวหันไป (ภาพแบบ isometric เอียง ~27°) */
+  const BIRDS=[{el:'stbBird1',x:503,y:561,w:80,h:47,d:[.89,-.45],k:1},{el:'stbBird2',x:1105,y:232,w:74,h:44,d:[-.89,-.45],k:.9},{el:'stbBird3',x:725,y:221,w:55,h:59,d:[-.89,-.45],k:.75}];
+  const span=(p,size,d,max)=>{if(Math.abs(d)<1e-6)return[-1e9,1e9];const a=(-size-p)/d,b=(max-p)/d;return a<b?[a,b]:[b,a]};
+  BIRDS.forEach((b,i)=>{b.node=$(b.el);const sx=span(b.x,b.w,b.d[0],1920),sy=span(b.y,b.h,b.d[1],1080);
+    b.sA=Math.max(sx[0],sy[0])-10;b.sB=Math.min(sx[1],sy[1])+10;b.s=0;b.ph=i*1.7});
+  const el=id=>$(id);let last=0,t0=performance.now(),nextBlink=t0+2500,blinkAt=-1,blinks=1,wasOn=true;
+  function blade(cx,cy,a){bc.save();bc.translate(cx,cy);bc.rotate(a);bc.beginPath();bc.moveTo(3,-2.6);
+    bc.quadraticCurveTo(R*.3,-3.4,R,-.6);bc.lineTo(R,.5);bc.quadraticCurveTo(R*.3,2.4,3,2.1);bc.closePath();
+    bc.fillStyle='#f6f8fa';bc.fill();bc.strokeStyle='rgba(110,125,140,.6)';bc.lineWidth=.9;bc.stroke();bc.restore()}
+  function flame(L,w,c,a){const g=jc.createLinearGradient(0,0,L,0);g.addColorStop(0,`rgba(${c},${a})`);g.addColorStop(.55,`rgba(${c},${a*.55})`);g.addColorStop(1,`rgba(${c},0)`);
+    jc.fillStyle=g;jc.beginPath();jc.moveTo(-6,-w/2);jc.quadraticCurveTo(L*.45,-w*.6,L,0);jc.quadraticCurveTo(L*.45,w*.6,-6,w/2);jc.closePath();jc.fill()}
+  function reset(){['stbMascot','stbEyeL','stbEyeR','stbDrone','stbCloud','stbSun','stbStart',...BIRDS.map(b=>b.el)].forEach(i=>el(i).style.transform='');
+    jc.clearRect(0,0,230,190);bc.clearRect(0,0,240,210);TURB.forEach(t=>{for(let k=0;k<3;k++)blade(t.x-OX,t.y-OY,(t.a0+k*120)*Math.PI/180)})}
+  function frame(now){
+    requestAnimationFrame(frame);
+    const on=S.stbAnim!=='0';if(!on){if(wasOn){wasOn=false;reset()}return}wasOn=true;
+    if(current!=='scr-standby'){last=now;return}
+    const dt=Math.min(.1,(now-(last||now))/1000);last=now;const t=(now-t0)/1000,TAU=Math.PI*2;
+    /* กังหัน */
+    bc.clearRect(0,0,240,210);const rot=t*TAU/Math.max(1,num('turbineRev'));
+    TURB.forEach((tb,i)=>{for(let k=0;k<3;k++)blade(tb.x-OX,tb.y-OY,(tb.a0+k*120)*Math.PI/180+rot*(1+i*.07))});
+    /* mascot ลอย */
+    el('stbMascot').style.transform=`translateY(${Math.sin(t*TAU/3.6)*12}px) rotate(${Math.sin(t*TAU/5.3)*1.8}deg)`;
+    /* ไอพ่นที่เท้า (จุดปล่อย = พื้นรองเท้า x1702,y978 ใน PSD) */
+    jc.clearRect(0,0,230,190);jc.save();jc.translate(22,73);jc.rotate(.38);jc.globalCompositeOperation='lighter';
+    const f=.86+.1*Math.sin(now/47)+.1*Math.random(),L=100*f;
+    flame(L,40,'255,105,20',.5);flame(L*.72,26,'255,180,40',.8);flame(L*.42,13,'255,250,225',1);jc.restore();
+    /* กระพริบตา: นานๆ ครั้ง บางทีกระพริบ 2 ที */
+    if(blinkAt<0&&now>=nextBlink){blinkAt=now;blinks=Math.random()<.25?2:1}
+    let sy=1;if(blinkAt>=0){const u=(now-blinkAt)/170;if(u>=blinks){blinkAt=-1;nextBlink=now+2500+Math.random()*3500}else{const v=u%1;sy=Math.max(.08,Math.abs(1-2*v))}}
+    el('stbEyeL').style.transform=el('stbEyeR').style.transform=`scaleY(${sy})`;
+    /* นก: บินเป็นเส้นตรง สุดจอแล้ววนกลับเข้ามาอีกฝั่ง */
+    const sp=num('birdSpeed');
+    BIRDS.forEach(b=>{b.s+=sp*b.k*dt;if(b.s>b.sB)b.s=b.sA;
+      const flap=1-.16*(.5+.5*Math.sin(t*TAU*2.3+b.ph)),bob=Math.sin(t*TAU*1.15+b.ph)*3;
+      b.node.style.transform=`translate(${b.d[0]*b.s}px,${b.d[1]*b.s+bob}px) scaleY(${flap})`});
+    /* drone ลอยนิ่งๆ สอยๆ */
+    el('stbDrone').style.transform=`translate(${Math.sin(t*TAU/4.3)*3}px,${Math.sin(t*TAU/2.2)*5}px) rotate(${Math.sin(t*TAU/3.1)*1.6}deg)`;
+    el('stbCloud').style.transform=`translateX(${Math.sin(t*TAU/14)*14}px)`;
+    el('stbSun').style.transform=`scale(${1+.025*Math.sin(t*TAU/5)}) rotate(${Math.sin(t*TAU/9)*2}deg)`;
+    el('stbStart').style.transform=`scale(${1+.035*(.5+.5*Math.sin(t*TAU/1.8))})`;
+  }
+  requestAnimationFrame(frame);
+  return {reset};
+})();
+
+/* ================= จบเกมแบบจับครบ: วงแสงทองขยายออกจากกล่องคะแนน (ไม่มีพลุ) ================= */
+const CELEB=(()=>{
+  const cv=$('celeb'),ctx=cv.getContext('2d');let parts=[],rockets=[],flash=null,run=false,until=0;
+  const COLORS=['#FFC20E','#FFD95A','#FFFFFF','#9FD3FF','#FFE9A8'];
+  /* จุดระเบิด: เลี่ยงตัวหนังสือ quote ตรงกลาง กระจายรอบๆ */
+  const SPOTS=[[1500,260],[700,230],[1700,560],[330,700],[1180,180],[1640,820],[900,860],[420,250]];
+  function burst(x,y){const n=95,c1=COLORS[Math.random()*COLORS.length|0],c2=COLORS[Math.random()*COLORS.length|0];
+    for(let i=0;i<n;i++){const a=i/n*Math.PI*2+Math.random()*.08,sp=3+Math.random()*6.2;
+      parts.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:1,dec:.008+Math.random()*.009,c:i%2?c1:c2,w:3+Math.random()*2.5})}
+    for(let i=0;i<14;i++)parts.push({x,y,vx:(Math.random()-.5)*1.6,vy:(Math.random()-.5)*1.6,life:1,dec:.02,c:'#FFFFFF',w:4})}
+  function rocket(tx,ty){rockets.push({x:tx+(Math.random()-.5)*120,y:1110,tx,ty,t:0})}
+  function frame(){
+    ctx.clearRect(0,0,1920,1080);ctx.globalCompositeOperation='lighter';
+    if(flash){flash.r+=26;flash.a-=.04;if(flash.a<=0)flash=null;else{ctx.globalAlpha=flash.a;ctx.strokeStyle='#FFC20E';ctx.lineWidth=10;
+      ctx.beginPath();ctx.arc(flash.x,flash.y,flash.r,0,7);ctx.stroke()}}
+    rockets=rockets.filter(r=>{r.t+=.045;const e=1-Math.pow(1-Math.min(1,r.t),2),x=r.x+(r.tx-r.x)*e,y=r.y+(r.ty-r.y)*e;
+      ctx.globalAlpha=.9;ctx.fillStyle='#FFE9A8';ctx.beginPath();ctx.arc(x,y,3,0,7);ctx.fill();
+      ctx.globalAlpha=.35;ctx.strokeStyle='#FFC20E';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x-(r.tx-r.x)*.08,y+60);ctx.stroke();
+      if(r.t>=1){burst(r.tx,r.ty);return false}return true});
+    parts=parts.filter(p=>{p.x+=p.vx;p.y+=p.vy;p.vx*=.985;p.vy=p.vy*.985+.045;p.life-=p.dec;if(p.life<=0)return false;
+      ctx.globalAlpha=Math.min(1,p.life*1.4);ctx.strokeStyle=p.c;ctx.lineWidth=p.w*p.life+.5;ctx.lineCap='round';
+      ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(p.x-p.vx*2.2,p.y-p.vy*2.2);ctx.stroke();return true});
+    ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
+    if(parts.length||rockets.length||flash||performance.now()<until)requestAnimationFrame(frame);else{run=false;ctx.clearRect(0,0,1920,1080)}
+  }
+  return {start(){if(S.celebrate==='0')return;parts=[];rockets=[];flash={x:275,y:445,r:40,a:.9};until=0;   /* ไม่มีพลุ: เหลือแค่วงแสงทองขยายออกจากกล่องคะแนน */
+      if(!run){run=true;requestAnimationFrame(frame)}},
+    stop(){parts=[];rockets=[];flash=null;until=0;ctx.clearRect(0,0,1920,1080)}};
+})();
+
+/* ================= เอฟเฟกต์จับคู่ถูก: ปิ๊ง + เส้นพลังงานเชื่อม 2 การ์ด (~0.8 วินาที) ================= */
+const MFX=(()=>{
+  const cv=$('matchFx'),ctx=cv.getContext('2d');let fx=[],running=false;
+  const center=el=>{const st=$('stage').getBoundingClientRect(),r=el.getBoundingClientRect(),k=st.width/1920;
+    return {x:(r.left+r.width/2-st.left)/k,y:(r.top+r.height/2-st.top)/k,w:r.width/k,h:r.height/k}};
+  /* เส้นหยักแบบสายฟ้า: สุ่มจุดกลางใหม่ทุกเฟรมให้ดูมีพลังงานไหล */
+  function bolt(a,b,prog,amp){
+    const ex=a.x+(b.x-a.x)*prog,ey=a.y+(b.y-a.y)*prog,dx=ex-a.x,dy=ey-a.y,len=Math.hypot(dx,dy)||1,nx=-dy/len,ny=dx/len;
+    const n=Math.max(4,len/38|0),pts=[[a.x,a.y]];
+    for(let i=1;i<n;i++){const t=i/n,off=(Math.random()*2-1)*amp*Math.sin(Math.PI*t);pts.push([a.x+dx*t+nx*off,a.y+dy*t+ny*off])}
+    pts.push([ex,ey]);return pts}
+  function stroke(pts,w,col,al){ctx.globalAlpha=al;ctx.strokeStyle=col;ctx.lineWidth=w;ctx.lineJoin=ctx.lineCap='round';
+    ctx.beginPath();pts.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.stroke()}
+  function spark(x,y,r,al){ /* ปิ๊ง: แฉก 4 ทิศ + แฉกเฉียงเล็ก + วงแหวนขยาย */
+    ctx.globalAlpha=al;ctx.strokeStyle='#fff';ctx.lineCap='round';
+    for(const [dx,dy,k] of [[1,0,1],[0,1,1],[.7,.7,.45],[.7,-.7,.45]]){ctx.lineWidth=k>.5?4:2.5;
+      ctx.beginPath();ctx.moveTo(x-dx*r*k,y-dy*r*k);ctx.lineTo(x+dx*r*k,y+dy*r*k);ctx.stroke()}
+    ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(x,y,r*.12,0,7);ctx.fill()}
+  function frame(now){
+    ctx.clearRect(0,0,1920,1080);ctx.globalCompositeOperation='lighter';
+    fx=fx.filter(f=>now-f.t0<f.dur);
+    for(const f of fx){const t=(now-f.t0)/f.dur,{a,b}=f;
+      const draw=Math.min(1,t/.25),fade=t<.55?1:1-(t-.55)/.45;      /* 0-25% วิ่งจาก A ไป B · 55-100% จางหาย */
+      for(let k=0;k<2;k++){const pts=bolt(a,b,draw,k?14:26);
+        stroke(pts,18,'#FFC20E',.22*fade);stroke(pts,8,'#FFD95A',.55*fade);stroke(pts,2.5,'#FFFFFF',.95*fade)}
+      /* หัวเส้นที่กำลังวิ่ง */
+      if(draw<1){const hx=a.x+(b.x-a.x)*draw,hy=a.y+(b.y-a.y)*draw;spark(hx,hy,26,.9)}
+      /* ปิ๊งที่การ์ดทั้งสองใบ: ใบแรกทันที ใบที่สองตอนเส้นไปถึง */
+      for(const [p,d] of [[a,0],[b,.22]]){const u=(t-d)/.5;if(u<0||u>1)continue;
+        const e=1-Math.pow(1-u,3);spark(p.x,p.y,40+70*e,1-u);
+        ctx.globalAlpha=(1-u)*.8;ctx.strokeStyle='#FFC20E';ctx.lineWidth=5*(1-u)+1;
+        ctx.beginPath();ctx.ellipse(p.x,p.y,(p.w*.35)*(.4+.9*e),(p.h*.35)*(.4+.9*e),0,0,7);ctx.stroke()}
+    }
+    ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
+    if(fx.length)requestAnimationFrame(frame);else{running=false;ctx.clearRect(0,0,1920,1080)}
+  }
+  return {burst(elA,elB){if(S.matchFx==='0')return;
+      fx.push({a:center(elA),b:center(elB),t0:performance.now(),dur:820});
+      if(!running){running=true;requestAnimationFrame(frame)}},
+    clear(){fx=[];ctx.clearRect(0,0,1920,1080)}};
+})();
+
+/* ================= FLOW ================= */
+let G=null;
+async function startRound(){
+  clearTimers();const my=++runId;
+  const {faces,pairs}=pickFaces();
+  const deck=shuffle(faces.flatMap(f=>[f,f]));
+  G={pairs,matched:0,first:null,lock:true,phase:'count',endAt:0,memEnd:0,paused:false,pausedAt:0};
+  const grid=$('grid');grid.innerHTML='';
+  deck.forEach((f,i)=>{const c=document.createElement('div');c.className='card';c.dataset.key=f.key;
+    c.innerHTML=`<div class="inner"><div class="face back${i%2?' b':''}"></div>${f.url?`<div class="face front" style="background-image:url('${f.url}')"></div>`:`<div class="face front">${f.label}</div>`}</div>`;
+    c.addEventListener('pointerdown',onCard);grid.appendChild(c)});
+  layoutGrid();
+  $('hudPairs').textContent=`0/${pairs}`;$('hudTime').textContent=mmss(num('playSec'));$('hudTime').classList.remove('warn');$('phase').textContent='';
+
+  /* นับถอยหลัง 3-2-1 (เว้นจังหวะให้เสียง START จบก่อน) */
+  $('countNum').textContent='';show('scr-count');
+  await sleep(650);
+  for(const n of [3,2,1]){if(my!==runId)return;const el=$('countNum');el.textContent=n;el.classList.remove('pop');void el.offsetWidth;el.classList.add('pop');sfx('count');await sleep(1000)}
+  if(my!==runId)return;
+
+  /* เปิดการ์ดให้จำ */
+  show('scr-game');musicStart();sfx('flip');
+  const els=[...grid.children];
+  for(const c of els){if(my!==runId)return;c.classList.add('up');await sleep(35)}
+  G.memEnd=Date.now()+num('memorizeSec')*1000;
+  while(G.paused||Date.now()<G.memEnd){if(my!==runId)return;if(!G.paused)$('phase').textContent=`MEMORIZE THE CARDS  ${Math.ceil((G.memEnd-Date.now())/1000)}`;await sleep(100)}
+
+  /* ปิดการ์ด เริ่มจับเวลา */
+  els.forEach(c=>c.classList.remove('up'));sfx('flip');$('phase').textContent='GO!';sfx('go');await sleep(500);if(my!==runId)return;
+  later(()=>{if(G&&G.phase==='play')$('phase').textContent=''},700);
+  G.phase='play';G.lock=false;G.endAt=Date.now()+num('playSec')*1000;G.warned=99;
+  every(()=>{if(G.paused)return;updTime();if(Date.now()>=G.endAt)endRound(false)},100);
+}
+const timeLeft=()=>G&&G.phase==='play'?Math.max(0,G.endAt-(G.paused?G.pausedAt:Date.now())):0;
+function updTime(){if(!G||G.phase!=='play')return;const t=timeLeft(),sec=Math.ceil(t/1000);
+  $('hudTime').textContent=mmss(sec);$('hudTime').classList.toggle('warn',t<=5000);
+  if(sec>=1&&sec<=5&&sec<G.warned){G.warned=sec;sfx('warning')}}
+
+function onCard(e){
+  if(!G||G.lock||G.paused||G.phase!=='play')return;
+  const c=e.currentTarget;if(c.classList.contains('up')||c.classList.contains('matched'))return;
+  c.classList.add('up');sfx('flip');
+  if(!G.first){G.first=c;return}
+  const a=G.first,b=c;G.first=null;
+  if(a.dataset.key===b.dataset.key){a.classList.add('matched');b.classList.add('matched');G.matched++;$('hudPairs').textContent=`${G.matched}/${G.pairs}`;
+    later(()=>sfx('match'),180);later(()=>MFX.burst(a,b),230);
+    if(G.matched>=G.pairs)later(()=>endRound(true),600);
+  }else{G.lock=true;later(()=>sfx('wrong'),300);later(()=>{a.classList.remove('up');b.classList.remove('up');if(G)G.lock=false},700)}
+}
+
+/* RESET: หยุดเวลาไว้ → ถามยืนยัน → YES กลับหน้าแรก / NO เล่นต่อ (ไม่ตอบภายใน confirmSec = เล่นต่อ) */
+let cfTimer=null;
+function pauseGame(){if(!G||G.paused||G.phase==='done')return;G.paused=true;G.pausedAt=Date.now()}
+function resumeGame(){if(!G||!G.paused)return;const d=Date.now()-G.pausedAt;G.paused=false;G.memEnd+=d;G.endAt+=d}
+function closeConfirm(){clearTimeout(cfTimer);$('confirm').classList.add('hidden')}
+$('btnReset').addEventListener('pointerdown',e=>{e.stopPropagation();if(!G||G.phase==='done'||!$('confirm').classList.contains('hidden'))return;
+  sfx('flip');pauseGame();$('confirm').classList.remove('hidden');
+  cfTimer=setTimeout(()=>{closeConfirm();resumeGame()},num('confirmSec')*1000)});
+$('cfNo').addEventListener('pointerdown',e=>{e.stopPropagation();sfx('flip');closeConfirm();resumeGame()});
+$('cfYes').addEventListener('pointerdown',e=>{e.stopPropagation();sfx('flip');closeConfirm();
+  if(S.resetMode==='restart'){musicStop(200);startRound()}else goStandby()});
+
+let result=null;
+function endRound(all){
+  if(!G||G.phase!=='play')return;
+  const leftMs=timeLeft(),left=Math.ceil(leftMs/1000);G.phase='done';G.lock=true;clearTimers();
+  $('hudTime').textContent=mmss(left);musicStop(700);if(!all)sfx('end');   /* จับครบ = เสียงปรบมือตอนขึ้นหน้าสรุป */
+  if(!all)$('hudTime').textContent='00:00';
+  const bonus=all?left*num('timeBonus'):0;
+  result={all,pairs:G.matched,total:G.pairs,score:G.matched*num('pointPerPair')+bonus,used:Math.round((num('playSec')*1000-leftMs)/1000)};
+  later(()=>{if(S.askName==='1')openNamePopup();else{saveScore('');showSummary()}},all?400:900);
+}
+
+/* popup ชื่อ */
+let popIdle=null;
+function openNamePopup(){$('nameInput').value='';$('popup').classList.remove('hidden');armPop()}
+function armPop(){clearTimeout(popIdle);popIdle=setTimeout(()=>closePopup(false),num('popupSec')*1000)}
+['input','pointerdown','keydown'].forEach(ev=>$('popup').addEventListener(ev,armPop));
+function closePopup(withName){clearTimeout(popIdle);$('popup').classList.add('hidden');$('nameInput').blur();saveScore(withName?$('nameInput').value.trim().slice(0,30):'');showSummary()}
+$('btnSave').onclick=()=>{if(!$('nameInput').value.trim()){$('nameInput').style.borderColor='#d64545';$('nameInput').focus();return}closePopup(true)};
+$('btnSkip').onclick=()=>closePopup(false);
+$('nameInput').addEventListener('input',e=>e.target.style.borderColor='#ccc');
+$('nameInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('btnSave').click()});
+function saveScore(name){if(!result)return;const all=load(K.score,[]);
+  all.push({name,score:result.score,pairs:result.pairs,total:result.total,used:result.used,reward:rewardTier(result.pairs),at:Date.now()});save(K.score,all)}
+
+/* หน้าสรุป */
+function rewardTier(p){return p>=num('r2Min')?2:p>=num('r1Min')?1:0}
+const GIFT='<svg viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="4" stroke-linejoin="round"><rect x="8" y="24" width="48" height="12" rx="2"/><path d="M12 36v20h40V36M32 24v32"/><path d="M32 24c-4-10-16-12-16-4 0 4 8 4 16 4zM32 24c4-10 16-12 16-4 0 4-8 4-16 4z"/></svg>';
+/* Did you know: ใช้รูปใน quotes/ ก่อน (txt01.png…) ถ้าไม่มีรูปเลยจึงใช้ข้อความใน quotes.js · จบเกม 1 ครั้ง = 1 รายการ เรียงไปเรื่อยๆ */
+const quoteSrc=()=>quoteImgs.length?quoteImgs:QUOTES;
+/* เลขลำดับ: อ่านจากชื่อไฟล์ (txt05.png → 05) · ถ้าใช้ข้อความ quotes.js = ลำดับข้อ */
+let quoteNo='';
+function nextQuote(){const L=quoteSrc();if(!L.length)return null;const i=(Number(localStorage.getItem(K.quote))||0)%L.length;
+  try{localStorage.setItem(K.quote,String((i+1)%L.length))}catch(e){}
+  if(quoteImgs.length){const m=L[i].split('/').pop().match(/txt(\d+(?:\.\d+)?)/i);
+    quoteNo=!m?String(i+1).padStart(2,'0'):m[1].includes('.')?m[1].replace(/^0+(?=\d)/,''):m[1];   /* txt05 → 05 · txt06.2 → 6.2 */
+    return {img:L[i]}}
+  quoteNo=String(i+1).padStart(2,'0');return L[i]}
+function fitText(el,max){el.style.fontSize=max+'px';let s=max;while(el.scrollHeight>el.clientHeight&&s>16){s-=1;el.style.fontSize=s+'px'}}
+let sumReady=0;
+function showSummary(){
+  clearTimers();
+  $('sumPairs').textContent=`${result.pairs}/${result.total}`;
+  const t=rewardTier(result.pairs),txt=[S.r0Text,S.r1Text,S.r2Text][t]||'';
+  const showR=S.showReward==='1';$('sumReward').classList.toggle('hidden',!showR);$('sumPairs').classList.toggle('withReward',showR);
+  $('sumReward').innerHTML=rewardImg[t]?`<img src="${rewardImg[t]}" alt="">`:`${GIFT}<div id="rewardText">${esc(txt).replace(/\\n|\n/g,'<br>')}</div>`;
+  const q=nextQuote(),d=$('dykText'),di=$('dykImg');
+  di.classList.toggle('hidden',!(q&&q.img));d.classList.toggle('hidden',!!(q&&q.img));
+  $('dykNo').textContent=q?quoteNo:'';$('dykNo').classList.toggle('hidden',!q||S.showQuoteNo==='0');
+  if(!q)d.textContent='';
+  else if(q.img){di.src=q.img;di.style.transform=`translateY(${Number(S.quoteY)||0}px)`}
+  else if(typeof q==='string'){d.textContent=q;fitText(d,48)}
+  else{let lang='th';const put=()=>{d.textContent=q[lang]||q.th||q.en||'';fitText(d,48)};put();
+    if(q.th&&q.en)every(()=>{lang=lang==='th'?'en':'th';put()},num('langSwitchSec')*1000)}
+  /* animation ตอนเข้าหน้าสรุป (รีสตาร์ททุกครั้ง) */
+  const sp=$('sumPairs'),qEls=[$('dykBox'),$('dykText')];
+  sp.classList.remove('anim-win','anim-lose');qEls.forEach(e=>e.classList.remove('reveal'));$('dykNo').classList.remove('fadeLate');
+  void sp.offsetWidth;
+  sp.classList.add(result.all?'anim-win':'anim-lose');qEls.forEach(e=>e.classList.add('reveal'));$('dykNo').classList.add('fadeLate');
+  CELEB.stop();
+  sumReady=Date.now()+1500;show('scr-summary');
+  if(result.all){sfx('applause');CELEB.start()}
+}
+$('scr-summary').addEventListener('pointerdown',()=>{if(Date.now()>sumReady)goStandby()});
+
+/* หน้า 1 */
+function goStandby(){closeConfirm();clearTimers();CELEB.stop();runId++;G=null;musicStop(400);$('popup').classList.add('hidden');show('scr-standby')}
+$('scr-standby').addEventListener('pointerdown',e=>{e.preventDefault();if(G)return;sfx('start');startRound()});
+
+/* ไม่มีคนแตะเกิน idleSec → กลับหน้า Stand by (ทุกหน้า ยกเว้น Stand by และ Setting) */
+let lastTouch=Date.now();
+['pointerdown','keydown'].forEach(ev=>addEventListener(ev,()=>{lastTouch=Date.now()},true));
+setInterval(()=>{if(current!=='scr-standby'&&!$('settings').classList.contains('open')&&Date.now()-lastTouch>num('idleSec')*1000){lastTouch=Date.now();goStandby()}},1000);
+
+/* ================= SETTING ================= */
+let taps=[];
+/* มุมซ้ายบน 5 ครั้ง = Setting · มุมขวาบน 5 ครั้ง = ปิดโปรแกรม (ภายใน 2 วินาที, ถ้าตั้ง PIN ต้องใส่ PIN ก่อน) */
+function tapCorner(el,fn){let t=[];el.addEventListener('pointerdown',e=>{e.stopPropagation();e.preventDefault();const now=Date.now();t=t.filter(x=>now-x<2000);t.push(now);if(t.length>=5){t=[];fn()}})}
+tapCorner($('hotspot'),()=>askSettings());
+tapCorner($('hotspotR'),()=>withPin(openQuit));
+addEventListener('keydown',e=>{if(e.ctrlKey&&e.shiftKey&&e.key.toLowerCase()==='s'){e.preventDefault();askSettings()}});
+let pinNext=null;
+function withPin(fn){if(!S.pin){fn();return}pinNext=fn;$('pinInput').value='';$('pinInput').style.borderColor='#ccc';$('pinBox').classList.remove('hidden');$('pinInput').focus()}
+function askSettings(){withPin(openSettings)}
+$('pinOk').onclick=()=>{if($('pinInput').value===String(S.pin)){$('pinBox').classList.add('hidden');const f=pinNext;pinNext=null;f&&f()}else{$('pinInput').value='';$('pinInput').style.borderColor='#d64545'}};
+/* ปิดโปรแกรม: ในตัว .exe ปิดได้ทันที · ถ้าเปิดผ่าน Chrome อาจปิดแท็บไม่ได้ จะแจ้งให้กด Alt+F4 */
+let quitT=null;
+function openQuit(){clearTimeout(quitT);$('quitMsg').textContent='เกมจะปิดและออกจากโหมดเต็มจอ';$('quitBox').classList.remove('hidden');quitT=setTimeout(()=>$('quitBox').classList.add('hidden'),15000)}
+$('quitNo').onclick=()=>{clearTimeout(quitT);$('quitBox').classList.add('hidden')};
+$('quitYes').onclick=()=>{musicStop(100);window.close();
+  setTimeout(()=>{$('quitMsg').textContent='เบราว์เซอร์ไม่อนุญาตให้ปิดเอง — กด Alt+F4 (หรือ Ctrl+W) เพื่อปิด';clearTimeout(quitT)},400)};
+$('pinInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('pinOk').click()});
+$('pinCancel').onclick=()=>$('pinBox').classList.add('hidden');
+
+function openSettings(){
+  clearTimers();runId++;G=null;musicStop(200);$('popup').classList.add('hidden');show('scr-standby');
+  document.querySelectorAll('[data-k]').forEach(el=>{el.value=S[el.dataset.k]});
+  renderAssets();renderScores();renderQuotes();
+  $('settings').classList.add('open');$('hotspot').classList.add('hidden');$('hotspotR').classList.add('hidden');
+}
+function readForm(){document.querySelectorAll('[data-k]').forEach(el=>{S[el.dataset.k]=el.type==='number'?Number(el.value):el.value});save(K.set,S)}
+const closeSettings=()=>{readForm();musicStop(100);$('settings').classList.remove('open');$('hotspot').classList.remove('hidden');$('hotspotR').classList.remove('hidden');lastTouch=Date.now()};
+$('btnClose').onclick=()=>{closeSettings();goStandby()};
+$('btnTest').onclick=()=>{closeSettings();startRound()};
+$('btnReload').onclick=()=>{readForm();location.reload()};
+$('btnQuit').onclick=()=>openQuit();
+$('btnFull').onclick=()=>{const d=document.documentElement;(d.requestFullscreen||d.webkitRequestFullscreen).call(d)};
+
+async function renderAssets(){
+  const files=['standby/bg.jpg','bg-countdown.jpg','bg-game.jpg','bg-summary.jpg','card-backA.png','card-backB.png'];
+  const ok=await Promise.all(files.map(f=>probe('assets/'+f)));
+  $('assetList').innerHTML=files.map((f,i)=>`<div class="${ok[i]?'ok':'miss'}">${ok[i]?'✓':'✗ ไม่พบ'} assets/${f}</div>`).join('')+
+    rewardImg.map((u,i)=>`<div class="${u?'ok':'note'}">${u?'✓':'–'} assets/reward-${i}.png ${u?'':'(ไม่มี ใช้ไอคอน+ข้อความ)'}</div>`).join('')+
+    Object.keys(SND_LIST).map(n=>`<div class="${SND.src[n]?'ok':'miss'}">${SND.src[n]?'✓ '+SND.src[n]:'✗ ไม่พบ assets/sounds/'+n+'.(mp3|ogg|m4a|wav)'} — ${SND_LIST[n]}</div>`).join('');
+  $('sndTest').innerHTML='<span class="note" style="align-self:center">ทดสอบ:</span>'+Object.keys(SND_LIST).map(n=>`<button class="sbtn gray" data-snd="${n}">${SND_LIST[n]}</button>`).join('')+
+    '<button class="sbtn gray" data-snd="_stop">หยุดเพลง</button>';
+  $('sndTest').querySelectorAll('[data-snd]').forEach(b=>b.onclick=()=>{readForm();const n=b.dataset.snd;
+    if(n==='_stop')musicStop(200);else if(n==='music')musicStart();else sfx(n)});
+  const pairs=num('pairs');
+  $('cardList').innerHTML=SETS.map(s=>`<div class="box"><b>Set ${s}</b> — assets/cards/${s}/ พบ ${cards[s].length} รูป
+    ${cards[s].length&&cards[s].length<pairs?`<span class="miss"> (น้อยกว่าจำนวนคู่ ${pairs})</span>`:''}
+    <div class="thumbs">${cards[s].map(u=>`<img src="${u}" title="${esc(u)}">`).join('')}</div></div>`).join('');
+}
+function renderQuotes(){
+  if(quoteImgs.length){const nx=(Number(localStorage.getItem(K.quote))||0)%quoteImgs.length;
+    $('quoteList').innerHTML=`<div class="note">ใช้รูปจากโฟลเดอร์ quotes/ (${quoteImgs.length} รูป) · กรอบสีน้ำเงิน = รูปที่จะแสดงครั้งถัดไป</div><div class="thumbs">`+
+      quoteImgs.map((u,i)=>`<div style="text-align:center;font-size:12px"><img src="${u}" style="width:180px;height:86px;object-fit:contain;background:#0a1f4d;border:3px solid ${i===nx?'#2f6fed':'transparent'};border-radius:6px"><br>${esc(u.split('/').pop())}</div>`).join('')+'</div>';return}
+  if(!QUOTES.length){$('quoteList').innerHTML='<span class="miss">ไม่พบรูปใน quotes/ และไม่พบข้อความใน quotes.js</span>';return}
+  const nx=(Number(localStorage.getItem(K.quote))||0)%QUOTES.length;
+  $('quoteList').innerHTML=QUOTES.map((q,i)=>`<div class="${i===nx?'next':''}">${i+1}. ${esc(typeof q==='string'?q:(q.th||'')+(q.en?' / '+q.en:''))}</div>`).join('');
+}
+$('btnQuoteReset').onclick=()=>{try{localStorage.setItem(K.quote,'0')}catch(e){}renderQuotes()};
+function renderScores(){const all=load(K.score,[]).sort((a,b)=>b.pairs-a.pairs||b.score-a.score);
+  $('scoreList').innerHTML=all.length?`<div class="note">ทั้งหมด ${all.length} รายการ</div>`+all.map((s,i)=>
+    `<div>${i+1}. ${esc(s.name||'-')} — ${s.pairs}/${s.total} คู่ · ${s.used} วิ · รางวัลขั้น ${s.reward??'-'} · ${new Date(s.at).toLocaleString('th-TH')}</div>`).join(''):'<span class="note">ยังไม่มีคะแนน</span>'}
+$('btnResetScores').onclick=()=>{if(confirm('ล้างคะแนนทั้งหมด? ย้อนกลับไม่ได้')){save(K.score,[]);renderScores()}};
+$('btnExport').onclick=()=>{const all=load(K.score,[]);
+  const csv='﻿name,pairs,total,reward_tier,score,seconds_used,time\n'+all.map(s=>[`"${String(s.name||'').replace(/"/g,'""')}"`,s.pairs,s.total,s.reward??'',s.score,s.used,new Date(s.at).toISOString()].join(',')).join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='scores.csv';a.click()};
+
+addEventListener('contextmenu',e=>e.preventDefault());
+document.addEventListener('gesturestart',e=>e.preventDefault());
+scanAssets();loadSounds();FX.attach(current);
+</script>
+</body>
+</html>
